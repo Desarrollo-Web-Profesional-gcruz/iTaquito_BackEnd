@@ -1,6 +1,7 @@
 const { Op } = require('sequelize');
 const { Product, Category } = require('../models');
-const { cloudinary } = require('../config/cloudinary');
+
+const INCLUDE = [{ model: Category, as: 'categoria', attributes: ['id', 'sNombre'] }];
 
 // GET /api/products
 const getAll = async (req, res) => {
@@ -33,7 +34,7 @@ const getAll = async (req, res) => {
 
     const products = await Product.findAll({
       where,
-      include: [{ model: Category, as: 'categoria', attributes: ['id', 'sNombre'] }],
+      include: INCLUDE,
       order: [['sNombre', 'ASC']],
     });
 
@@ -47,12 +48,12 @@ const getAll = async (req, res) => {
 // GET /api/products/:id
 const getById = async (req, res) => {
   try {
-    const product = await Product.findOne({
-      where: { id: req.params.id, bActivo: true },
-      include: [{ model: Category, as: 'categoria', attributes: ['id', 'sNombre'] }],
-    });
+    const where = { id: req.params.id };
+    if (req.user?.rol !== 'admin') where.bActivo = true;
 
+    const product = await Product.findOne({ where, include: INCLUDE });
     if (!product) return res.status(404).json({ message: 'Producto no encontrado.' });
+
     return res.json(product);
   } catch (error) {
     return res.status(500).json({ message: 'Error al obtener producto.', error: error.message });
@@ -62,7 +63,11 @@ const getById = async (req, res) => {
 // POST /api/products  (admin)
 const create = async (req, res) => {
   try {
-    const { sNombre, sDescripcion, dPrecio, bDisponible, iCategoriaId } = req.body;
+    const {
+      sNombre, sDescripcion, dPrecio,
+      bDisponible, bActivo, iCategoriaId,
+      sImagenUrl: sImagenUrlBody,
+    } = req.body;
 
     if (!sNombre || !dPrecio || !iCategoriaId) {
       return res.status(400).json({ message: 'sNombre, dPrecio e iCategoriaId son requeridos.' });
@@ -71,16 +76,21 @@ const create = async (req, res) => {
     const category = await Category.findByPk(iCategoriaId);
     if (!category) return res.status(404).json({ message: 'Categoría no encontrada.' });
 
-    // Si se subió imagen, multer+Cloudinary ya la guardó y retorna la URL en req.file.path
-    const sImagenUrl = req.file ? req.file.path : null;
+    // Multer/Cloudinary tiene prioridad; si no hay archivo, usa la URL del body
+    const sImagenUrl = req.file ? req.file.path : (sImagenUrlBody || null);
 
     const product = await Product.create({
-      sNombre, sDescripcion, dPrecio, sImagenUrl,
-      bDisponible: bDisponible ?? true,
+      sNombre,
+      sDescripcion: sDescripcion || null,
+      dPrecio,
+      sImagenUrl,
+      bDisponible:  bDisponible !== undefined ? bDisponible : true,
+      bActivo:      bActivo     !== undefined ? bActivo     : true,
       iCategoriaId,
     });
 
-    return res.status(201).json({ message: 'Producto creado exitosamente.', product });
+    const full = await Product.findByPk(product.id, { include: INCLUDE });
+    return res.status(201).json({ message: 'Producto creado exitosamente.', product: full });
   } catch (error) {
     return res.status(500).json({ message: 'Error al crear producto.', error: error.message });
   }
@@ -89,22 +99,38 @@ const create = async (req, res) => {
 // PUT /api/products/:id  (admin)
 const update = async (req, res) => {
   try {
-    const product = await Product.findOne({ where: { id: req.params.id, bActivo: true } });
+    // Admin puede editar activos e inactivos
+    const product = await Product.findByPk(req.params.id);
     if (!product) return res.status(404).json({ message: 'Producto no encontrado.' });
 
-    const { sNombre, sDescripcion, dPrecio, bDisponible, iCategoriaId } = req.body;
+    const {
+      sNombre, sDescripcion, dPrecio,
+      bDisponible, bActivo, iCategoriaId,
+      sImagenUrl: sImagenUrlBody,
+    } = req.body;
 
     if (iCategoriaId) {
       const category = await Category.findByPk(iCategoriaId);
       if (!category) return res.status(404).json({ message: 'Categoría no encontrada.' });
     }
 
-    // Si se sube nueva imagen, reemplaza la URL; si no, conserva la existente
-    const sImagenUrl = req.file ? req.file.path : product.sImagenUrl;
+    // Imagen: archivo subido > URL del body > conservar la existente
+    const sImagenUrl = req.file
+      ? req.file.path
+      : (sImagenUrlBody !== undefined ? sImagenUrlBody : product.sImagenUrl);
 
-    await product.update({ sNombre, sDescripcion, dPrecio, sImagenUrl, bDisponible, iCategoriaId });
+    await product.update({
+      ...(sNombre      !== undefined && { sNombre      }),
+      ...(sDescripcion !== undefined && { sDescripcion }),
+      ...(dPrecio      !== undefined && { dPrecio      }),
+      ...(bDisponible  !== undefined && { bDisponible  }),
+      ...(bActivo      !== undefined && { bActivo      }),
+      ...(iCategoriaId !== undefined && { iCategoriaId }),
+      sImagenUrl,
+    });
 
-    return res.json({ message: 'Producto actualizado exitosamente.', product });
+    const full = await Product.findByPk(product.id, { include: INCLUDE });
+    return res.json({ message: 'Producto actualizado exitosamente.', product: full });
   } catch (error) {
     return res.status(500).json({ message: 'Error al actualizar producto.', error: error.message });
   }
@@ -113,11 +139,11 @@ const update = async (req, res) => {
 // DELETE /api/products/:id  (admin) — eliminación lógica
 const remove = async (req, res) => {
   try {
-    const product = await Product.findOne({ where: { id: req.params.id, bActivo: true } });
-    if (!product) return res.status(404).json({ message: 'Producto no encontrado.' });
+    const product = await Product.findByPk(req.params.id);
+    if (!product)          return res.status(404).json({ message: 'Producto no encontrado.' });
+    if (!product.bActivo)  return res.status(400).json({ message: 'El producto ya está eliminado.' });
 
     await product.update({ bActivo: false });
-
     return res.json({ message: 'Producto eliminado correctamente.' });
   } catch (error) {
     return res.status(500).json({ message: 'Error al eliminar producto.', error: error.message });
