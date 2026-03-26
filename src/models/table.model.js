@@ -19,17 +19,12 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
         unique: true,
-        validate: {
-          notEmpty: true,
-        },
+        validate: { notEmpty: true },
       },
       iCapacidad: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        validate: {
-          min: 1,
-          max: 20,
-        },
+        validate: { min: 1, max: 20 },
       },
       sUbicacion: {
         type: DataTypes.ENUM('interior', 'exterior', 'terraza', 'vip'),

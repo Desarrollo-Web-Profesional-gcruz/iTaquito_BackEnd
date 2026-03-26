@@ -4,8 +4,12 @@ const { verifyToken, verifyAdmin } = require('../middlewares/auth.middleware');
 
 const router = Router();
 
-// GET /api/users/me - Usuario autenticado ve su perfil
-router.get('/me', verifyToken, getMe);
+router.get('/me',                verifyToken,              getMe);
+router.get('/mesas-disponibles', verifyToken, verifyAdmin, getMesasDisponibles);
+router.get('/',                  verifyToken, verifyAdmin, getAllUsers);
+router.post('/',                 verifyToken, verifyAdmin, createUser);
+router.put('/:id',               verifyToken, verifyAdmin, updateUser);
+router.delete('/:id',            verifyToken, verifyAdmin, deleteUser);
 
 // GET /api/users/mesas-disponibles - Solo admin
 router.get('/mesas-disponibles', verifyToken, verifyAdmin, getMesasDisponibles);
