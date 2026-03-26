@@ -29,8 +29,12 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
       },
+      iMesaId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
       rol: {
-        type: DataTypes.ENUM('admin', 'cliente'),
+        type: DataTypes.ENUM('admin', 'cliente', 'mesero', 'cajero', 'taquero'),
         defaultValue: 'cliente',
       },
     },
