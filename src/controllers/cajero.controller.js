@@ -30,40 +30,41 @@ const ORDER_INCLUDE = [
   },
 ];
 
-/* ─── HELPER: total desde items ──────────────────────────────── */
+/* ─── HELPER ─────────────────────────────────────────────────── */
 const calcularTotalOrden = (order) =>
   order.items.reduce((sum, item) => sum + parseFloat(item.dSubtotal || 0), 0);
 
 /* ══════════════════════════════════════════════════════════════
    GET /cajero/orders-by-table
-   Órdenes agrupadas por mesa.
-   Solo muestra órdenes de la sesión activa de cada usuario:
-   filtra por createdAt >= loginAt del usuario de esa mesa.
-   Excluye canceladas y pagadas.
 ══════════════════════════════════════════════════════════════ */
 const getOrdersByTable = async (req, res) => {
   try {
     const { estado } = req.query;
 
-    // Condición base: no pagadas, no canceladas
-    const whereConditions = {
-      bPagado: false,
-      sEstado: estado && estado !== 'todos'
-        ? { [Op.and]: [{ [Op.ne]: 'cancelado' }, { [Op.eq]: estado }] }
-        : { [Op.ne]: 'cancelado' },
-    };
+    // FIX: lógica simplificada — armar el where por partes
+    // evita el problema de Op.and con Op.eq en ciertas versiones de Sequelize
+    const where = { bPagado: false };
+
+    const estadosExcluidos = ['cancelado', 'pagado'];
+
+    if (estado && estado !== 'todos') {
+      // Filtrar por estado específico (ya excluye cancelado por definición del ENUM)
+      where.sEstado = estado;
+    } else {
+      // Mostrar todos excepto cancelado y pagado
+      where.sEstado = { [Op.notIn]: estadosExcluidos };
+    }
 
     const orders = await Order.findAll({
-      where: whereConditions,
+      where,
       include: ORDER_INCLUDE,
       order: [['createdAt', 'ASC']],
     });
 
-    // Agrupar por mesa
     const ordersByTable = {};
 
     orders.forEach(order => {
-      const mesaId    = order.iMesaId;
+      const mesaId     = order.iMesaId;
       const totalOrden = calcularTotalOrden(order);
 
       if (!ordersByTable[mesaId]) {
@@ -90,8 +91,8 @@ const getOrdersByTable = async (req, res) => {
     res.json({
       success: true,
       data: result,
-      totalMesasConCuentas:   result.length,
-      totalVentasPendientes:  result.reduce((sum, t) => sum + t.totalMesa, 0),
+      totalMesasConCuentas:  result.length,
+      totalVentasPendientes: result.reduce((sum, t) => sum + t.totalMesa, 0),
     });
 
   } catch (error) {
@@ -106,7 +107,6 @@ const getOrdersByTable = async (req, res) => {
 
 /* ══════════════════════════════════════════════════════════════
    GET /cajero/orders-by-table/:mesaId
-   Detalle de órdenes no pagadas de una mesa
 ══════════════════════════════════════════════════════════════ */
 const getOrdersByMesaId = async (req, res) => {
   try {
@@ -116,7 +116,7 @@ const getOrdersByMesaId = async (req, res) => {
       where: {
         iMesaId: mesaId,
         bPagado: false,
-        sEstado: { [Op.ne]: 'cancelado' },
+        sEstado: { [Op.notIn]: ['cancelado', 'pagado'] },
       },
       include: ORDER_INCLUDE,
       order: [['createdAt', 'ASC']],
@@ -148,22 +148,12 @@ const getOrdersByMesaId = async (req, res) => {
 
 /* ══════════════════════════════════════════════════════════════
    POST /cajero/approve-payment/:mesaId
-   Aprueba el pago de todas las órdenes de una mesa.
-
-   Flujo de sesión:
-   1. Marca todas las órdenes como pagadas
-   2. Libera la mesa (sEstado = 'disponible')
-   3. Genera un nuevo token para el usuario de la mesa con
-      un loginAt nuevo — esto invalida el token anterior
-      ya que los pedidos anteriores quedaron antes de ese loginAt.
-      El frontend debe recibir este token y reemplazar el actual,
-      forzando así el "cierre de sesión" de la sesión anterior.
 ══════════════════════════════════════════════════════════════ */
 const approvePayment = async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
-    const { mesaId }    = req.params;
+    const { mesaId }     = req.params;
     const { metodoPago } = req.body;
 
     const metodosValidos = ['efectivo', 'tarjeta', 'transferencia'];
@@ -185,7 +175,7 @@ const approvePayment = async (req, res) => {
       where: {
         iMesaId: mesaId,
         bPagado: false,
-        sEstado: { [Op.ne]: 'cancelado' },
+        sEstado: { [Op.notIn]: ['cancelado', 'pagado'] },
       },
       include: ORDER_INCLUDE,
       transaction,
@@ -199,9 +189,8 @@ const approvePayment = async (req, res) => {
       });
     }
 
-    const totalPagar = orders.reduce((sum, order) => sum + calcularTotalOrden(order), 0);
+    const totalPagar = orders.reduce((sum, o) => sum + calcularTotalOrden(o), 0);
 
-    // 1. Marcar órdenes como pagadas
     await Order.update(
       {
         bPagado:     true,
@@ -213,13 +202,12 @@ const approvePayment = async (req, res) => {
         where: {
           iMesaId: mesaId,
           bPagado: false,
-          sEstado: { [Op.ne]: 'cancelado' },
+          sEstado: { [Op.notIn]: ['cancelado', 'pagado'] },
         },
         transaction,
       }
     );
 
-    // 2. Liberar la mesa
     await Table.update(
       { sEstado: 'disponible' },
       { where: { id: mesaId }, transaction }
@@ -227,11 +215,6 @@ const approvePayment = async (req, res) => {
 
     await transaction.commit();
 
-    // 3. Regenerar token del usuario de la mesa con nuevo loginAt.
-    //    Esto "invalida" la sesión anterior: cuando el cliente intente
-    //    consultar /orders, su loginAt viejo no coincidirá con los nuevos
-    //    pedidos (que aún no existen), mostrando lista vacía.
-    //    El frontend recibe este token y lo guarda, reemplazando el anterior.
     const usuarioDeMesa = orders[0]?.usuario;
     let nuevoToken = null;
 
@@ -241,7 +224,7 @@ const approvePayment = async (req, res) => {
           id:      usuarioDeMesa.id,
           rol:     usuarioDeMesa.rol,
           iMesaId: parseInt(mesaId, 10),
-          loginAt: new Date().toISOString(), // nuevo loginAt → nueva sesión
+          loginAt: new Date().toISOString(),
         },
         process.env.JWT_SECRET,
         { expiresIn: '12h' }
@@ -252,12 +235,10 @@ const approvePayment = async (req, res) => {
       success: true,
       message: 'Pago aprobado exitosamente',
       data: {
-        mesa:             mesa.sNombre,
-        totalPagado:      totalPagar,
+        mesa:              mesa.sNombre,
+        totalPagado:       totalPagar,
         metodoPago,
-        ordersProcesadas: orders.length,
-        // El frontend del cajero puede entregar este token al cliente
-        // (ej. mostrarlo en pantalla o enviarlo por otro canal)
+        ordersProcesadas:  orders.length,
         nuevoTokenCliente: nuevoToken,
       },
     });
@@ -275,7 +256,6 @@ const approvePayment = async (req, res) => {
 
 /* ══════════════════════════════════════════════════════════════
    PUT /cajero/change-table-status/:mesaId
-   Cambiar disponibilidad de mesa manualmente
 ══════════════════════════════════════════════════════════════ */
 const changeTableAvailability = async (req, res) => {
   try {
@@ -315,7 +295,6 @@ const changeTableAvailability = async (req, res) => {
 
 /* ══════════════════════════════════════════════════════════════
    GET /cajero/sales-summary
-   Resumen de ventas del día
 ══════════════════════════════════════════════════════════════ */
 const getSalesSummary = async (req, res) => {
   try {
@@ -335,13 +314,13 @@ const getSalesSummary = async (req, res) => {
     });
 
     const totalVentas = ordersPagadas.reduce(
-      (sum, order) => sum + parseFloat(order.dTotal || 0), 0
+      (sum, o) => sum + parseFloat(o.dTotal || 0), 0
     );
 
-    const porMetodoPago = ordersPagadas.reduce((acc, order) => {
-      const metodo = order.sMetodoPago || 'no_registrado';
+    const porMetodoPago = ordersPagadas.reduce((acc, o) => {
+      const metodo = o.sMetodoPago || 'no_registrado';
       if (!acc[metodo]) acc[metodo] = { total: 0, cantidad: 0 };
-      acc[metodo].total    += parseFloat(order.dTotal || 0);
+      acc[metodo].total    += parseFloat(o.dTotal || 0);
       acc[metodo].cantidad += 1;
       return acc;
     }, {});
@@ -353,7 +332,7 @@ const getSalesSummary = async (req, res) => {
         totalVentas,
         totalOrdenes: ordersPagadas.length,
         porMetodoPago,
-        ordenes:      ordersPagadas.map(o => ({
+        ordenes: ordersPagadas.map(o => ({
           id:         o.id,
           mesa:       o.mesa?.sNombre || `Mesa ${o.iMesaId}`,
           total:      o.dTotal,
