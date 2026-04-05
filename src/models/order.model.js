@@ -41,6 +41,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      sTokenSesion: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       // NUEVOS CAMPOS PARA CAJERO
       bPagado: {
         type: DataTypes.BOOLEAN,

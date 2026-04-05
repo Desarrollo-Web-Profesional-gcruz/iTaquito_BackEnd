@@ -9,8 +9,8 @@ async function main() {
     await sequelize.authenticate();
     console.log('Conexión a la base de datos establecida.');
 
-    // await sequelize.sync({ alter: true }); // Descomentar para sincronizar modelos
-    
+    await sequelize.sync({ alter: true }); // Descomentar para sincronizar modelos
+
     app.listen(PORT, () => {
       console.log(`Servidor corriendo en http://localhost:${PORT}`);
     });

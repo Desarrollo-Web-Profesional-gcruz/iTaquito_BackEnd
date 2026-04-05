@@ -32,7 +32,7 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 'interior',
       },
       sEstado: {
-        type: DataTypes.ENUM('disponible', 'ocupada', 'reservada', 'inactiva'),
+        type: DataTypes.ENUM('disponible', 'ocupada', 'reservada', 'inactiva', 'en_pago'),
         allowNull: false,
         defaultValue: 'disponible',
       },

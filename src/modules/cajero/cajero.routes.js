@@ -1,14 +1,14 @@
 'use strict';
 
 const { Router } = require('express');
-const { verifyToken, verifyCajero } = require('../middlewares/auth.middleware');
+const { verifyToken, verifyCajero } = require('../../common/middleware/auth.middleware');
 const {
   getOrdersByTable,
   getOrdersByMesaId,
   approvePayment,
   changeTableAvailability,
   getSalesSummary,
-} = require('../controllers/cajero.controller');
+} = require('./cajero.controller');
 
 const router = Router();
 

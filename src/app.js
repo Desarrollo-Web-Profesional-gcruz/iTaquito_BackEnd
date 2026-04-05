@@ -9,14 +9,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Rutas
-const authRoutes = require('./routes/auth.routes');
-const userRoutes = require('./routes/user.routes');
-const productRoutes = require('./routes/product.routes');
-const categoryRoutes = require('./routes/category.routes');
-const tableRoutes = require('./routes/table.routes'); 
-const orderRoutes = require('./routes/order.routes');
-const cajeroRoutes = require('./routes/cajero.routes');
-
+const authRoutes = require('./modules/auth/auth.routes');
+const userRoutes = require('./modules/users/users.routes');
+const productRoutes = require('./modules/products/products.routes');
+const categoryRoutes = require('./modules/categories/categories.routes');
+const tableRoutes = require('./modules/tables/tables.routes'); 
+const orderRoutes = require('./modules/orders/orders.routes');
+const cajeroRoutes = require('./modules/cajero/cajero.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);

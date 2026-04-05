@@ -1,7 +1,7 @@
 const { Router } = require('express');
-const { getAll, getById, create, update, remove } = require('../controllers/product.controller');
-const { verifyToken, verifyAdmin } = require('../middlewares/auth.middleware');
-const { upload } = require('../config/cloudinary');
+const { getAll, getById, create, update, remove } = require('./products.controller');
+const { verifyToken, verifyAdmin } = require('../../common/middleware/auth.middleware');
+const { upload } = require('../../config/cloudinary');
 
 const router = Router();
 

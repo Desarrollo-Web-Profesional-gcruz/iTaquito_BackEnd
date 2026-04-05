@@ -11,21 +11,21 @@ const users = [
   },
   {
     nombre: 'Cliente Ejemplo',
-    email: 'cliente@itaquito.com',
-    password: 'cliente123',
-    rol: 'cliente'  
+    email: 'mesa@itaquito.com',
+    password: 'mesa123',
+    rol: 'mesa'  
   },
   {
     nombre: 'Juan Pérez',
     email: 'juan@example.com',
     password: 'juan123',
-    rol: 'cliente'
+    rol: 'mesa'
   },
   {
     nombre: 'María García',
     email: 'maria@example.com',
     password: 'maria123',
-    rol: 'cliente'
+    rol: 'mesa'
   }
 ];
 

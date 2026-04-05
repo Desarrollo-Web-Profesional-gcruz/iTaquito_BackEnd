@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt    = require('jsonwebtoken');
-const { User, Table } = require('../models');
+const { User, Table } = require('../../models');
 
 /* ══════════════════════════════════════════════════════════════
    POST /api/auth/register
@@ -76,13 +76,8 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Credenciales inválidas.' });
     }
 
-    // Marcar mesa como ocupada si es cliente
-    if (user.rol === 'cliente' && user.iMesaId) {
-      const mesa = await Table.findByPk(user.iMesaId);
-      if (mesa) await mesa.update({ sEstado: 'ocupada' });
-    }
-
-    // FIX: incluir loginAt en el payload — se usa en order.controller
+    // El estado de la mesa ya no se marca como ocupada aquí.
+    // El frontend (MenuMesa) lo cambia a 'ocupada' nativamente al dar click a 'Comenzar'.
     // para filtrar pedidos de la sesión actual solamente
     const loginAt = new Date().toISOString();
 
@@ -127,7 +122,7 @@ const login = async (req, res) => {
 ══════════════════════════════════════════════════════════════ */
 const logout = async (req, res) => {
   try {
-    if (req.user?.rol === 'cliente' && req.user?.iMesaId) {
+    if (req.user?.rol === 'mesa' && req.user?.iMesaId) {
       const mesa = await Table.findByPk(req.user.iMesaId);
       if (mesa) await mesa.update({ sEstado: 'disponible' });
     }
