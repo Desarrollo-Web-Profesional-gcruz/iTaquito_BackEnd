@@ -1,5 +1,5 @@
 const bcrypt = require('bcryptjs');
-const { User, Table } = require('../models');
+const { User, Table } = require('../../models');
 
 const USER_ATTRS = { exclude: ['password'] };
 const INCLUDE_MESA = [{ model: Table, as: 'mesa', attributes: ['id', 'sNombre', 'sEstado', 'sUbicacion'] }];
@@ -37,7 +37,7 @@ const getMesasDisponibles = async (req, res) => {
   try {
     // Mesas que no tienen ningún usuario cliente asignado
     const mesasOcupadas = await User.findAll({
-      where: { rol: 'cliente' },
+      where: { rol: 'mesa' },
       attributes: ['iMesaId'],
       raw: true,
     });
@@ -74,7 +74,7 @@ const createUser = async (req, res) => {
     if (existing) return res.status(400).json({ message: 'El email ya está registrado.' });
 
     // Si es cliente, debe tener mesa; si no es cliente, no debe tener mesa
-    if (rol === 'cliente') {
+    if (rol === 'mesa') {
       if (!iMesaId) return res.status(400).json({ message: 'Un cliente debe tener una mesa asignada.' });
 
       const mesa = await Table.findByPk(iMesaId);
@@ -82,7 +82,7 @@ const createUser = async (req, res) => {
       if (!mesa.bActivo) return res.status(400).json({ message: 'La mesa no está activa.' });
 
       // Verificar que la mesa no esté asignada a otro cliente
-      const mesaOcupada = await User.findOne({ where: { rol: 'cliente', iMesaId } });
+      const mesaOcupada = await User.findOne({ where: { rol: 'mesa', iMesaId } });
       if (mesaOcupada) return res.status(400).json({ message: 'Esa mesa ya tiene un cliente asignado.' });
     }
 
@@ -93,7 +93,7 @@ const createUser = async (req, res) => {
       email,
       password: hashedPassword,
       rol,
-      iMesaId: rol === 'cliente' ? iMesaId : null,
+      iMesaId: rol === 'mesa' ? iMesaId : null,
     });
 
     const full = await User.findByPk(user.id, { attributes: USER_ATTRS, include: INCLUDE_MESA });
@@ -118,14 +118,14 @@ const updateUser = async (req, res) => {
 
     const rolFinal = rol || user.rol;
 
-    if (rolFinal === 'cliente' && iMesaId !== undefined) {
+    if (rolFinal === 'mesa' && iMesaId !== undefined) {
       const mesa = await Table.findByPk(iMesaId);
       if (!mesa) return res.status(404).json({ message: 'Mesa no encontrada.' });
 
       // Verificar que la mesa no esté asignada a otro cliente diferente
       const { Op } = require('sequelize');
       const mesaOcupada = await User.findOne({
-        where: { rol: 'cliente', iMesaId, id: { [Op.ne]: user.id } },
+        where: { rol: 'mesa', iMesaId, id: { [Op.ne]: user.id } },
       });
       if (mesaOcupada) return res.status(400).json({ message: 'Esa mesa ya tiene un cliente asignado.' });
     }
@@ -137,7 +137,7 @@ const updateUser = async (req, res) => {
     if (password) updates.password = await bcrypt.hash(password, 10);
 
     // Manejo de mesa según rol
-    if (rolFinal === 'cliente') {
+    if (rolFinal === 'mesa') {
       updates.iMesaId = iMesaId !== undefined ? iMesaId : user.iMesaId;
     } else {
       updates.iMesaId = null; // staff nunca tiene mesa

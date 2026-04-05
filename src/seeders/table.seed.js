@@ -43,7 +43,7 @@ async function seedTables() {
           nombre:   `${table.sNombre}`,
           email,
           password: passwordHash,
-          rol:      'cliente',
+          rol:      'mesa',
           iMesaId:  table.id,
         },
       });
