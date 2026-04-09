@@ -6,8 +6,8 @@ const {
   update,
   remove,
   changeStatus,
-} = require('../controllers/table.controller');
-const { verifyToken, verifyAdmin } = require('../middlewares/auth.middleware');
+} = require('./tables.controller');
+const { verifyToken, verifyAdmin } = require('../../common/middleware/auth.middleware');
 
 const router = Router();
 
@@ -19,6 +19,6 @@ router.get('/:id', verifyToken, getById);
 router.post('/', verifyToken, verifyAdmin, create);
 router.put('/:id', verifyToken, verifyAdmin, update);
 router.delete('/:id', verifyToken, verifyAdmin, remove);
-router.patch('/:id/estado', verifyToken, verifyAdmin, changeStatus);
+router.patch('/:id/estado', verifyToken, changeStatus);
 
 module.exports = router;

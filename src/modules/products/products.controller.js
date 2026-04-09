@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Product, Category } = require('../models');
+const { Product, Category } = require('../../models');
 
 const INCLUDE = [{ model: Category, as: 'categoria', attributes: ['id', 'sNombre'] }];
 

@@ -2,8 +2,8 @@
 
 const { Op } = require('sequelize');
 const jwt = require('jsonwebtoken');
-const { Order, OrderItem, Product, Table, User } = require('../models');
-const { sequelize } = require('../models');
+const { Order, OrderItem, Product, Table, User } = require('../../models');
+const { sequelize } = require('../../models');
 
 /* ─── INCLUDE BASE ───────────────────────────────────────────── */
 const ORDER_INCLUDE = [
@@ -73,6 +73,7 @@ const getOrdersByTable = async (req, res) => {
       order: [['createdAt', 'ASC']],
     });
 
+<<<<<<< HEAD:src/controllers/cajero.controller.js
     // 3. Agrupar por mesa y filtrar por sesión activa
     const ordersByTable = {};
 
@@ -83,10 +84,18 @@ const getOrdersByTable = async (req, res) => {
 
       // Si hay dUltimoLogin para esta mesa, ignorar pedidos anteriores a esa fecha
       if (loginAt && new Date(order.createdAt) < new Date(loginAt)) return;
+=======
+    const ordersBySession = {};
 
-      if (!ordersByTable[mesaId]) {
-        ordersByTable[mesaId] = {
+    orders.forEach(order => {
+      const tokenSesion = order.sTokenSesion || `legacy-${order.iMesaId}`;
+      const totalOrden = calcularTotalOrden(order);
+>>>>>>> origin/main:src/modules/cajero/cajero.controller.js
+
+      if (!ordersBySession[tokenSesion]) {
+        ordersBySession[tokenSesion] = {
           mesa:        order.mesa,
+          tokenSesion: tokenSesion,
           orders:      [],
           totalMesa:   0,
           ordersCount: 0,
@@ -94,15 +103,15 @@ const getOrdersByTable = async (req, res) => {
         };
       }
 
-      ordersByTable[mesaId].orders.push({
+      ordersBySession[tokenSesion].orders.push({
         ...order.toJSON(),
         totalCalculado: totalOrden,
       });
-      ordersByTable[mesaId].totalMesa   += totalOrden;
-      ordersByTable[mesaId].ordersCount += 1;
+      ordersBySession[tokenSesion].totalMesa   += totalOrden;
+      ordersBySession[tokenSesion].ordersCount += 1;
     });
 
-    const result = Object.values(ordersByTable).sort((a, b) =>
+    const result = Object.values(ordersBySession).sort((a, b) =>
       (a.mesa?.sNombre || '').localeCompare(b.mesa?.sNombre || '')
     );
 
@@ -188,7 +197,7 @@ const approvePayment = async (req, res) => {
 
   try {
     const { mesaId }     = req.params;
-    const { metodoPago } = req.body;
+    const { metodoPago, sTokenSesion } = req.body;
 
     const metodosValidos = ['efectivo', 'tarjeta', 'transferencia'];
     if (!metodoPago || !metodosValidos.includes(metodoPago)) {
@@ -197,6 +206,15 @@ const approvePayment = async (req, res) => {
         success: false,
         message: `Método de pago inválido. Opciones: ${metodosValidos.join(', ')}`,
       });
+    }
+
+    const orderWhere = {
+      iMesaId: mesaId,
+      bPagado: false,
+      sEstado: { [Op.notIn]: ['cancelado', 'pagado'] },
+    };
+    if (sTokenSesion && !sTokenSesion.startsWith('legacy-')) {
+      orderWhere.sTokenSesion = sTokenSesion;
     }
 
     const mesa = await Table.findByPk(mesaId, { transaction });
@@ -223,7 +241,11 @@ const approvePayment = async (req, res) => {
     }
 
     const orders = await Order.findAll({
+<<<<<<< HEAD:src/controllers/cajero.controller.js
       where: whereOrdenes,
+=======
+      where: orderWhere,
+>>>>>>> origin/main:src/modules/cajero/cajero.controller.js
       include: ORDER_INCLUDE,
       transaction,
     });
@@ -240,8 +262,21 @@ const approvePayment = async (req, res) => {
 
     // 1. Marcar órdenes como pagadas
     await Order.update(
+<<<<<<< HEAD:src/controllers/cajero.controller.js
       { bPagado: true, dFechaPago: new Date(), sMetodoPago: metodoPago, sEstado: 'pagado' },
       { where: whereOrdenes, transaction }
+=======
+      {
+        bPagado:     true,
+        dFechaPago:  new Date(),
+        sMetodoPago: metodoPago,
+        sEstado:     'pagado',
+      },
+      {
+        where: orderWhere,
+        transaction,
+      }
+>>>>>>> origin/main:src/modules/cajero/cajero.controller.js
     );
 
     // 2. Liberar mesa
@@ -300,11 +335,13 @@ const approvePayment = async (req, res) => {
    PUT /cajero/change-table-status/:mesaId
 ══════════════════════════════════════════════════════════════ */
 const changeTableAvailability = async (req, res) => {
+  const transaction = await sequelize.transaction();
+
   try {
     const { mesaId }  = req.params;
     const { sEstado } = req.body;
 
-    const estadosValidos = ['disponible', 'ocupada', 'reservada', 'inactiva'];
+    const estadosValidos = ['disponible', 'ocupada', 'reservada', 'inactiva', 'en_pago'];
     if (!sEstado || !estadosValidos.includes(sEstado)) {
       return res.status(400).json({
         success: false,
@@ -312,14 +349,39 @@ const changeTableAvailability = async (req, res) => {
       });
     }
 
+<<<<<<< HEAD:src/controllers/cajero.controller.js
     const mesa = await Table.findByPk(mesaId);
     if (!mesa) return res.status(404).json({ success: false, message: 'Mesa no encontrada' });
+=======
+    const mesa = await Table.findByPk(mesaId, { transaction });
+    if (!mesa) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, message: 'Mesa no encontrada' });
+    }
+>>>>>>> origin/main:src/modules/cajero/cajero.controller.js
 
-    await mesa.update({ sEstado });
+    if (sEstado === 'disponible') {
+      // Cancelar todos los pedidos huérfanos que no estén ya pagados o cancelados
+      await Order.update(
+        { sEstado: 'cancelado' },
+        { 
+          where: {
+            iMesaId: mesaId,
+            bPagado: false,
+            sEstado: { [Op.notIn]: ['cancelado', 'pagado'] },
+          },
+          transaction
+        }
+      );
+    }
+
+    await mesa.update({ sEstado }, { transaction });
+    await transaction.commit();
 
     res.json({ success: true, message: `Estado de mesa actualizado a "${sEstado}"`, data: mesa });
 
   } catch (error) {
+    if (transaction) await transaction.rollback();
     console.error('Error en changeTableAvailability:', error);
     res.status(500).json({ success: false, message: 'Error al cambiar disponibilidad', error: error.message });
   }

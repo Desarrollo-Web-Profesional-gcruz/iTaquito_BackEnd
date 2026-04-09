@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { Order, OrderItem, Product, Table, User } = require('../models');
+const { Order, OrderItem, Product, Table, User } = require('../../models');
 
 /* ─── INCLUDE BASE ───────────────────────────────────────────── */
 const ORDER_INCLUDE = [
@@ -50,15 +50,16 @@ const getAll = async (req, res) => {
       where.createdAt = { [Op.gte]: inicio, [Op.lt]: fin };
     }
 
-    if (req.user.rol === 'cliente') {
+    if (req.user.rol === 'mesa') {
       // Forzar mesa del token — el cliente no puede ver otras mesas
       where.iMesaId    = req.user.iMesaId;
       where.iUsuarioId = req.user.id;
 
-      // FIX SESIÓN: filtrar solo pedidos creados desde el inicio de esta sesión.
-      // loginAt viene en el JWT y se regenera en cada login, así pedidos
-      // de sesiones anteriores del mismo usuario/mesa quedan excluidos.
-      if (req.user.loginAt) {
+      // FIX SESIÓN: filtrar mediante token explícito desde localStorage en vez del JWT
+      if (req.query.sTokenSesion) {
+        where.sTokenSesion = req.query.sTokenSesion;
+      } else if (req.user.loginAt) {
+        // Fallback legado si no hay tokenSesion
         const desde = new Date(req.user.loginAt);
         where.createdAt = { [Op.gte]: desde };
       }
@@ -99,7 +100,7 @@ const getById = async (req, res) => {
     }
 
     // Cliente solo puede ver pedidos de su mesa
-    if (req.user.rol === 'cliente' && order.iMesaId !== req.user.iMesaId) {
+    if (req.user.rol === 'mesa' && order.iMesaId !== req.user.iMesaId) {
       return res.status(403).json({ success: false, message: 'Sin acceso a este pedido.' });
     }
 
@@ -119,7 +120,7 @@ const getById = async (req, res) => {
 ══════════════════════════════════════════════════════════════ */
 const create = async (req, res) => {
   try {
-    const { iMesaId, items, sNotas } = req.body;
+    const { iMesaId, items, sNotas, sTokenSesion } = req.body;
     const iUsuarioId = req.user?.id || null;
 
     if (!iMesaId) {
@@ -175,6 +176,7 @@ const create = async (req, res) => {
     const order = await Order.create({
       iMesaId, iUsuarioId,
       sNotas:  sNotas || null,
+      sTokenSesion: sTokenSesion || null,
       dTotal,
       sEstado: 'pendiente',
     });

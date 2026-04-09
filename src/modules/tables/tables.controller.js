@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Table } = require('../models');
+const { Table } = require('../../models');
 
 // GET /api/tables - Obtener todas las mesas con filtros
 const getAll = async (req, res) => {
@@ -224,7 +224,7 @@ const changeStatus = async (req, res) => {
       });
     }
 
-    if (!['disponible', 'ocupada', 'reservada', 'inactiva'].includes(sEstado)) {
+    if (!['disponible', 'ocupada', 'reservada', 'inactiva', 'en_pago'].includes(sEstado)) {
       return res.status(400).json({ 
         success: false, 
         message: 'Estado no válido.' 

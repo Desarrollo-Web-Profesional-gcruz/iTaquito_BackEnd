@@ -1,21 +1,21 @@
 'use strict';
 
 const { Router } = require('express');
-const { verifyToken, verifyAdmin } = require('../middlewares/auth.middleware');
+const { verifyToken, verifyAdmin } = require('../../common/middleware/auth.middleware');
 const {
   getAll,
   getById,
   create,
   changeStatus,
   cancel,
-} = require('../controllers/order.controller');
+} = require('./orders.controller');
 
 const router = Router();
 
-// POST /api/orders — cliente crea su pedido
+// POST /api/orders — mesa crea su pedido
 router.post('/', verifyToken, create);
 
-// GET /api/orders — cliente ve sus pedidos (filtrado por mesa), staff ve todos
+// GET /api/orders — mesa ve sus pedidos (filtrado por mesa), staff ve todos
 router.get('/', verifyToken, getAll);
 
 // GET /api/orders/:id
