@@ -4,7 +4,6 @@ const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
   class User extends Model {
     static associate(models) {
-      // Un cliente pertenece a una mesa
       User.belongsTo(models.Table, { foreignKey: 'iMesaId', as: 'mesa' });
     }
   }
@@ -30,18 +29,22 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
       },
-      iMesaId: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-      },
       rol: {
         type: DataTypes.ENUM('admin', 'cliente', 'mesero', 'cajero', 'taquero'),
         defaultValue: 'cliente',
       },
       iMesaId: {
         type: DataTypes.INTEGER,
-        allowNull: true,    // null para admin, mesero y caja
+        allowNull: true,
         references: { model: 'tables', key: 'id' },
+      },
+      // NUEVO: marca el inicio de la sesión activa del cliente.
+      // Se actualiza en cada login y cuando el cajero aprueba el pago.
+      // El cajero filtra pedidos de la mesa solo desde esta fecha.
+      dUltimoLogin: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        defaultValue: null,
       },
     },
     {

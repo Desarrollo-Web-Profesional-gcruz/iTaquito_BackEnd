@@ -16,31 +16,20 @@ const register = async (req, res) => {
 
     if (iMesaId) {
       const mesa = await Table.findByPk(iMesaId);
-      if (!mesa) {
-        return res.status(404).json({ message: 'Mesa no encontrada.' });
-      }
-      if (mesa.sEstado === 'ocupada') {
-        return res.status(400).json({ message: 'La mesa ya está ocupada.' });
-      }
+      if (!mesa) return res.status(404).json({ message: 'Mesa no encontrada.' });
+      if (mesa.sEstado === 'ocupada') return res.status(400).json({ message: 'La mesa ya está ocupada.' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await User.create({
-      nombre,
-      email,
+      nombre, email,
       password: hashedPassword,
       iMesaId: iMesaId || null,
     });
 
     return res.status(201).json({
       message: 'Usuario registrado exitosamente.',
-      user: {
-        id:      user.id,
-        nombre:  user.nombre,
-        email:   user.email,
-        rol:     user.rol,
-        iMesaId: user.iMesaId,
-      },
+      user: { id: user.id, nombre: user.nombre, email: user.email, rol: user.rol, iMesaId: user.iMesaId },
     });
   } catch (error) {
     console.error(error);
@@ -50,8 +39,8 @@ const register = async (req, res) => {
 
 /* ══════════════════════════════════════════════════════════════
    POST /api/auth/login
-   FIX: se agrega loginAt al payload del JWT para que el backend
-   pueda filtrar pedidos por sesión activa sin tabla de sesiones.
+   - Actualiza dUltimoLogin en BD para clientes
+   - Incluye loginAt en JWT para filtrar pedidos por sesión
 ══════════════════════════════════════════════════════════════ */
 const login = async (req, res) => {
   try {
@@ -67,24 +56,19 @@ const login = async (req, res) => {
       }],
     });
 
-    if (!user) {
-      return res.status(401).json({ message: 'Credenciales inválidas.' });
-    }
+    if (!user) return res.status(401).json({ message: 'Credenciales inválidas.' });
 
     const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) {
-      return res.status(401).json({ message: 'Credenciales inválidas.' });
-    }
+    if (!validPassword) return res.status(401).json({ message: 'Credenciales inválidas.' });
 
-    // Marcar mesa como ocupada si es cliente
+    const loginAt = new Date();
+
     if (user.rol === 'cliente' && user.iMesaId) {
       const mesa = await Table.findByPk(user.iMesaId);
       if (mesa) await mesa.update({ sEstado: 'ocupada' });
+      // NUEVO: guardar inicio de sesión en BD
+      await user.update({ dUltimoLogin: loginAt });
     }
-
-    // FIX: incluir loginAt en el payload — se usa en order.controller
-    // para filtrar pedidos de la sesión actual solamente
-    const loginAt = new Date().toISOString();
 
     const token = jwt.sign(
       {
@@ -92,15 +76,13 @@ const login = async (req, res) => {
         email:   user.email,
         rol:     user.rol,
         iMesaId: user.iMesaId || null,
-        loginAt,                          // <-- nuevo campo
+        loginAt: loginAt.toISOString(),
       },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
     );
 
-    const mesaActualizada = user.iMesaId
-      ? await Table.findByPk(user.iMesaId)
-      : null;
+    const mesaActualizada = user.iMesaId ? await Table.findByPk(user.iMesaId) : null;
 
     return res.json({
       message: 'Login exitoso.',
@@ -112,7 +94,7 @@ const login = async (req, res) => {
         rol:     user.rol,
         iMesaId: user.iMesaId || null,
         mesa:    mesaActualizada || null,
-        loginAt,                          // el frontend guarda esto en AuthContext
+        loginAt: loginAt.toISOString(),
       },
     });
   } catch (error) {
@@ -123,7 +105,6 @@ const login = async (req, res) => {
 
 /* ══════════════════════════════════════════════════════════════
    POST /api/auth/logout
-   Libera la mesa del cliente al cerrar sesión
 ══════════════════════════════════════════════════════════════ */
 const logout = async (req, res) => {
   try {
