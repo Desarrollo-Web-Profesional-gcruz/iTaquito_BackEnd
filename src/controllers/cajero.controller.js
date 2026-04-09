@@ -160,6 +160,7 @@ const getOrdersByMesaId = async (req, res) => {
 
     const totalMesa = ordersConTotal.reduce((sum, o) => sum + o.totalCalculado, 0);
 
+    
     res.json({
       success: true,
       data: ordersConTotal,
