@@ -1,122 +1,270 @@
+const speakeasy = require('speakeasy');
 const bcrypt = require('bcryptjs');
-const jwt    = require('jsonwebtoken');
-const { User, Table } = require('../../models');
+const jwt = require('jsonwebtoken');
+const { User } = require('../../models');
 
-/* ══════════════════════════════════════════════════════════════
-   POST /api/auth/register
-══════════════════════════════════════════════════════════════ */
+// Función para verificar código 2FA
+const verify2FACode = (secret, token) => {
+  return speakeasy.totp.verify({
+    secret: secret,
+    encoding: 'base32',
+    token: token,
+    window: 1
+  });
+};
+
+// Registro de usuario
 const register = async (req, res) => {
   try {
-    const { nombre, email, password, iMesaId } = req.body;
+    const { email, password, nombre, rol } = req.body;
 
+    // Verificar si el usuario ya existe
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
-      return res.status(400).json({ message: 'El email ya está registrado.' });
+      return res.status(400).json({ message: 'El usuario ya existe' });
     }
 
-    if (iMesaId) {
-      const mesa = await Table.findByPk(iMesaId);
-      if (!mesa) return res.status(404).json({ message: 'Mesa no encontrada.' });
-      if (mesa.sEstado === 'ocupada') return res.status(400).json({ message: 'La mesa ya está ocupada.' });
-    }
-
+    // Hashear contraseña
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Crear usuario
     const user = await User.create({
-      nombre, email,
+      email,
       password: hashedPassword,
-      iMesaId: iMesaId || null,
+      nombre,
+      rol: rol || 'usuario',
+      twoFactorEnabled: false
     });
 
-    return res.status(201).json({
-      message: 'Usuario registrado exitosamente.',
-      user: { id: user.id, nombre: user.nombre, email: user.email, rol: user.rol, iMesaId: user.iMesaId },
+    res.status(201).json({
+      message: 'Usuario registrado exitosamente',
+      user: {
+        id: user.id,
+        email: user.email,
+        nombre: user.nombre,
+        rol: user.rol
+      }
     });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Error al registrar usuario.', error: error.message });
+    console.error('Error en register:', error);
+    res.status(500).json({ message: 'Error al registrar usuario' });
   }
 };
 
-/* ══════════════════════════════════════════════════════════════
-   POST /api/auth/login
-   - Actualiza dUltimoLogin en BD para clientes
-   - Incluye loginAt en JWT para filtrar pedidos por sesión
-══════════════════════════════════════════════════════════════ */
+// Login con manejo de 2FA
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, twoFactorCode } = req.body;
 
-    const user = await User.findOne({
-      where: { email },
-      include: [{
-        model: Table,
-        as: 'mesa',
-        attributes: ['id', 'sNombre', 'sUbicacion', 'sEstado'],
-        required: false,
-      }],
-    });
-
-    if (!user) return res.status(401).json({ message: 'Credenciales inválidas.' });
-
-    const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) return res.status(401).json({ message: 'Credenciales inválidas.' });
-
-    const loginAt = new Date();
-
-    if (user.rol === 'cliente' && user.iMesaId) {
-      const mesa = await Table.findByPk(user.iMesaId);
-      if (mesa) await mesa.update({ sEstado: 'ocupada' });
-      // NUEVO: guardar inicio de sesión en BD
-      await user.update({ dUltimoLogin: loginAt });
+    // Buscar usuario por email
+    const user = await User.findOne({ where: { email } });
+    
+    if (!user) {
+      return res.status(401).json({ message: 'Credenciales incorrectas' });
     }
 
+    // Verificar contraseña
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Credenciales incorrectas' });
+    }
+
+    // Verificar si el usuario tiene 2FA activado
+    if (user.twoFactorEnabled) {
+      // Si no se proporcionó código 2FA, pedirlo
+      if (!twoFactorCode) {
+        return res.status(200).json({
+          requires2FA: true,
+          userId: user.id,
+          message: 'Se requiere código de autenticación de dos factores'
+        });
+      }
+
+      // Verificar código 2FA
+      const isValid2FA = verify2FACode(user.twoFactorSecret, twoFactorCode);
+      
+      // Si el código 2FA no es válido, verificar códigos de respaldo
+      let isBackupCode = false;
+      if (!isValid2FA && user.backupCodes) {
+        const backupCodes = JSON.parse(user.backupCodes);
+        for (let i = 0; i < backupCodes.length; i++) {
+          if (await bcrypt.compare(twoFactorCode, backupCodes[i])) {
+            isBackupCode = true;
+            // Eliminar el código de respaldo usado
+            backupCodes.splice(i, 1);
+            await user.update({ backupCodes: JSON.stringify(backupCodes) });
+            break;
+          }
+        }
+      }
+
+      if (!isValid2FA && !isBackupCode) {
+        return res.status(401).json({ message: 'Código 2FA inválido' });
+      }
+    }
+
+    // Generar token JWT
     const token = jwt.sign(
-      {
-        id:      user.id,
-        email:   user.email,
-        rol:     user.rol,
-        iMesaId: user.iMesaId || null,
-        loginAt: loginAt.toISOString(),
+      { 
+        id: user.id, 
+        email: user.email, 
+        rol: user.rol,
+        nombre: user.nombre 
       },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+      { expiresIn: '24h' }
     );
 
-    const mesaActualizada = user.iMesaId ? await Table.findByPk(user.iMesaId) : null;
-
-    return res.json({
-      message: 'Login exitoso.',
+    // Enviar respuesta exitosa
+    res.json({
+      message: 'Login exitoso',
       token,
       user: {
-        id:      user.id,
-        nombre:  user.nombre,
-        email:   user.email,
-        rol:     user.rol,
-        iMesaId: user.iMesaId || null,
-        mesa:    mesaActualizada || null,
-        loginAt: loginAt.toISOString(),
-      },
+        id: user.id,
+        email: user.email,
+        nombre: user.nombre,
+        rol: user.rol,
+        twoFactorEnabled: user.twoFactorEnabled
+      }
     });
+
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Error al iniciar sesión.', error: error.message });
+    console.error('Error en login:', error);
+    res.status(500).json({ message: 'Error en el servidor' });
   }
 };
 
-/* ══════════════════════════════════════════════════════════════
-   POST /api/auth/logout
-══════════════════════════════════════════════════════════════ */
+// Verificar 2FA por separado (opcional)
+const verify2FA = async (req, res) => {
+  try {
+    const { userId, twoFactorCode } = req.body;
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    // Verificar código 2FA
+    const isValid2FA = verify2FACode(user.twoFactorSecret, twoFactorCode);
+    
+    // Verificar códigos de respaldo
+    let isBackupCode = false;
+    if (!isValid2FA && user.backupCodes) {
+      const backupCodes = JSON.parse(user.backupCodes);
+      for (let i = 0; i < backupCodes.length; i++) {
+        if (await bcrypt.compare(twoFactorCode, backupCodes[i])) {
+          isBackupCode = true;
+          backupCodes.splice(i, 1);
+          await user.update({ backupCodes: JSON.stringify(backupCodes) });
+          break;
+        }
+      }
+    }
+
+    if (!isValid2FA && !isBackupCode) {
+      return res.status(401).json({ message: 'Código 2FA inválido' });
+    }
+
+    // Generar token JWT
+    const token = jwt.sign(
+      { 
+        id: user.id, 
+        email: user.email, 
+        rol: user.rol,
+        nombre: user.nombre 
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      message: '2FA verificado correctamente',
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        nombre: user.nombre,
+        rol: user.rol,
+        twoFactorEnabled: user.twoFactorEnabled
+      }
+    });
+
+  } catch (error) {
+    console.error('Error en verify2FA:', error);
+    res.status(500).json({ message: 'Error en el servidor' });
+  }
+};
+
+// Logout
 const logout = async (req, res) => {
   try {
-    if (req.user?.rol === 'mesa' && req.user?.iMesaId) {
-      const mesa = await Table.findByPk(req.user.iMesaId);
-      if (mesa) await mesa.update({ sEstado: 'disponible' });
-    }
-    return res.json({ message: 'Sesión cerrada correctamente.' });
+    // El logout se maneja en el frontend eliminando el token
+    res.json({ message: 'Logout exitoso' });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Error al cerrar sesión.', error: error.message });
+    console.error('Error en logout:', error);
+    res.status(500).json({ message: 'Error en el servidor' });
   }
 };
 
-module.exports = { register, login, logout };
+// Solicitar reset de contraseña
+const requestPasswordReset = async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    // Generar token de reset
+    const resetToken = jwt.sign(
+      { userId: user.id },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    // Aquí enviarías el email con el token
+    // Por ahora solo lo devolvemos en la respuesta
+    res.json({
+      message: 'Token de reset generado',
+      resetToken // En producción no devolver esto, enviar por email
+    });
+  } catch (error) {
+    console.error('Error en requestPasswordReset:', error);
+    res.status(500).json({ message: 'Error en el servidor' });
+  }
+};
+
+// Reset de contraseña por admin
+const adminResetPassword = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { newPassword } = req.body;
+
+    if (req.user.rol !== 'admin') {
+      return res.status(403).json({ message: 'No autorizado' });
+    }
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await user.update({ password: hashedPassword });
+
+    res.json({ message: 'Contraseña restablecida exitosamente' });
+  } catch (error) {
+    console.error('Error en adminResetPassword:', error);
+    res.status(500).json({ message: 'Error en el servidor' });
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  verify2FA,
+  logout,
+  requestPasswordReset,
+  adminResetPassword
+};

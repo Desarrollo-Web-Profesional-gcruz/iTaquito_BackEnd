@@ -47,6 +47,22 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         defaultValue: null,
       },
+      twoFactorEnabled: {
+  type: DataTypes.BOOLEAN,
+  defaultValue: false
+},
+twoFactorSecret: {
+  type: DataTypes.STRING,
+  allowNull: true
+},
+backupCodes: {
+  type: DataTypes.TEXT,
+  allowNull: true
+},
+resetRequestedAt: {
+  type: DataTypes.DATE,
+  allowNull: true
+}
     },
     {
       sequelize,
