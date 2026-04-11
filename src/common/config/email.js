@@ -1,12 +1,27 @@
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST || 'smtp-relay.brevo.com',
+  port: parseInt(process.env.EMAIL_PORT) || 587,
+  secure: false,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 
-// Enviar correo de recuperación
+transporter.verify((error) => {
+  if (error) {
+    console.error('❌ Error al conectar con el servidor de correo:', error.message);
+  } else {
+    console.log('✅ Servidor de correo listo para enviar emails');
+  }
+});
+
 const sendPasswordResetEmail = async (to, nombre, resetLink) => {
-  if (!process.env.RESEND_API_KEY) {
-    console.error('❌ RESEND_API_KEY no está configurado en las variables de entorno');
-    throw new Error('Configuración de email faltante. Contacta al administrador.');
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.error('❌ EMAIL_USER o EMAIL_PASS no están configurados');
+    throw new Error('Configuración de email faltante.');
   }
 
   console.log(`📧 Intentando enviar correo de recuperación a: ${to}`);
@@ -55,20 +70,15 @@ const sendPasswordResetEmail = async (to, nombre, resetLink) => {
   `;
 
   try {
-    const { data, error } = await resend.emails.send({
-      from: 'iTaquito <onboarding@resend.dev>',
+    const info = await transporter.sendMail({
+      from: '"iTaquito" <a7c57b001@smtp-brevo.com>',
       to,
       subject: '🔐 Recupera tu contraseña - iTaquito',
       html,
     });
 
-    if (error) {
-      console.error('❌ Error de Resend:', error);
-      throw new Error(error.message);
-    }
-
-    console.log(`✅ Correo enviado exitosamente a ${to} — ID: ${data.id}`);
-    return data;
+    console.log(`✅ Correo enviado exitosamente a ${to} — ID: ${info.messageId}`);
+    return info;
   } catch (error) {
     console.error('❌ Error al enviar el correo:', error.message);
     throw new Error(`No se pudo enviar el correo de recuperación: ${error.message}`);
