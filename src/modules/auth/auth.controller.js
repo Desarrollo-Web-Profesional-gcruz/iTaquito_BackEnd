@@ -219,34 +219,31 @@ const logout = async (req, res) => {
 const requestPasswordReset = async (req, res) => {
   try {
     const { email } = req.body;
+    console.log('📧 requestPasswordReset llamado con email:', email);
 
     if (!email) {
       return res.status(400).json({ message: 'El correo electrónico es requerido' });
     }
 
     const user = await User.findOne({ where: { email } });
-    
-    // Por seguridad, no revelamos si el email existe o no
+    console.log('👤 Usuario encontrado:', user ? user.id : 'NO ENCONTRADO');
+
     if (!user) {
       return res.status(200).json({ 
         message: 'Si el correo existe en nuestro sistema, recibirás un enlace de recuperación'
       });
     }
 
-    // Generar token único
     const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetExpires = new Date(Date.now() + 3600000); // 1 hora
+    const resetExpires = new Date(Date.now() + 3600000);
 
-    await user.update({
-      resetToken,
-      resetExpires
-    });
+    await user.update({ resetToken, resetExpires });
+    console.log('🔑 Token guardado correctamente');
 
-    // Construir enlace de recuperación
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
+    console.log('🔗 resetLink:', resetLink);
 
-    // Enviar email
     await sendPasswordResetEmail(user.email, user.nombre, resetLink);
 
     res.json({ 
@@ -254,12 +251,13 @@ const requestPasswordReset = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error en requestPasswordReset:', error);
-    res.status(500).json({ message: 'Error al procesar la solicitud' });
+    console.error('❌ Error en requestPasswordReset:', error.message);
+    console.error('Stack:', error.stack);
+    res.status(500).json({ message: error.message || 'Error al procesar la solicitud' });
   }
 };
 
-// Verificar token de recuperación (opcional, para validar antes de mostrar el formulario)
+// Verificar token de recuperación
 const verifyResetToken = async (req, res) => {
   try {
     const { token } = req.params;
