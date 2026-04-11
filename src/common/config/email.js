@@ -1,12 +1,17 @@
 const nodemailer = require('nodemailer');
 
+const emailUser = (process.env.EMAIL_USER || '').replace(/"/g, '');
+const emailPass = (process.env.EMAIL_PASS || '').replace(/"/g, '');
+const emailHost = (process.env.EMAIL_HOST || 'smtp-relay.brevo.com').replace(/"/g, '');
+const emailPort = parseInt((process.env.EMAIL_PORT || '587').replace(/"/g, ''));
+
 const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp-relay.brevo.com',
-  port: parseInt(process.env.EMAIL_PORT) || 587,
+  host: emailHost,
+  port: emailPort,
   secure: false,
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    user: emailUser,
+    pass: emailPass,
   },
 });
 
@@ -19,7 +24,7 @@ transporter.verify((error) => {
 });
 
 const sendPasswordResetEmail = async (to, nombre, resetLink) => {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  if (!emailUser || !emailPass) {
     console.error('❌ EMAIL_USER o EMAIL_PASS no están configurados');
     throw new Error('Configuración de email faltante.');
   }
