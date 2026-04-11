@@ -3,12 +3,12 @@ const nodemailer = require('nodemailer');
 const emailUser = (process.env.EMAIL_USER || '').replace(/"/g, '');
 const emailPass = (process.env.EMAIL_PASS || '').replace(/"/g, '');
 const emailHost = (process.env.EMAIL_HOST || 'smtp-relay.brevo.com').replace(/"/g, '');
-const emailPort = parseInt((process.env.EMAIL_PORT || '587').replace(/"/g, ''));
+const emailPort = parseInt((process.env.EMAIL_PORT || '465').replace(/"/g, ''));
 
 const transporter = nodemailer.createTransport({
   host: emailHost,
   port: emailPort,
-  secure: false,
+  secure: true,
   auth: {
     user: emailUser,
     pass: emailPass,
