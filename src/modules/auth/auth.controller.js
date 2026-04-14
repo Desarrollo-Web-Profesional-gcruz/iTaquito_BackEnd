@@ -104,7 +104,8 @@ const login = async (req, res) => {
         id: user.id, 
         email: user.email, 
         rol: user.rol,
-        nombre: user.nombre 
+        nombre: user.nombre, 
+         iMesaId: user.mesa ? user.mesa.id : null
       },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
