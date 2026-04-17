@@ -99,8 +99,13 @@ const login = async (req, res) => {
       }
     }
 
-    // Actualizar el dUltimoLogin para iniciar una nueva sesión
-    await user.update({ dUltimoLogin: new Date() });
+    // 🔥 SOLO ACTUALIZAR EL LOGIN SI: es el primero O ha pasado más de 12 horas 
+    // Esto permite que el cliente recargue la página o re-inicie sesión sin que se le borren sus pedidos del "ticket actual"
+    const DOCE_HORAS = 12 * 60 * 60 * 1000;
+    const ahora = new Date();
+    if (!user.dUltimoLogin || (ahora - new Date(user.dUltimoLogin)) > DOCE_HORAS) {
+      await user.update({ dUltimoLogin: ahora });
+    }
 
     const token = jwt.sign(
       { 
@@ -172,8 +177,12 @@ const verify2FA = async (req, res) => {
       return res.status(401).json({ message: 'Código 2FA inválido' });
     }
 
-    // Actualizar el dUltimoLogin para iniciar una nueva sesión
-    await user.update({ dUltimoLogin: new Date() });
+    // 🔥 SOLO ACTUALIZAR EL LOGIN SI: es el primero O ha pasado más de 12 horas
+    const DOCE_HORAS = 12 * 60 * 60 * 1000;
+    const ahora = new Date();
+    if (!user.dUltimoLogin || (ahora - new Date(user.dUltimoLogin)) > DOCE_HORAS) {
+      await user.update({ dUltimoLogin: ahora });
+    }
 
     const token = jwt.sign(
       { 
