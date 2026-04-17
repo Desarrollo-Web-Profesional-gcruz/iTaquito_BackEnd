@@ -47,6 +47,7 @@ const categoryRoutes = require('./modules/categories/categories.routes');
 const tableRoutes = require('./modules/tables/tables.routes'); 
 const orderRoutes = require('./modules/orders/orders.routes');
 const cajeroRoutes = require('./modules/cajero/cajero.routes');
+const commentRoutes = require('./modules/comments/comments.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -55,6 +56,7 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/tables', tableRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/cajero', cajeroRoutes);
+app.use('/api/comments', commentRoutes);
 
 // Ruta de prueba
 app.get('/', (req, res) => {

@@ -1,7 +1,7 @@
 'use strict';
 
 const { Router } = require('express');
-const { verifyToken, verifyAdmin } = require('../../common/middleware/auth.middleware');
+const { verifyToken, verifyStaff } = require('../../common/middleware/auth.middleware');
 const {
   getAll,
   getById,
@@ -21,10 +21,11 @@ router.get('/', verifyToken, getAll);
 // GET /api/orders/:id
 router.get('/:id', verifyToken, getById);
 
-// PATCH /api/orders/:id/status — staff
-router.patch('/:id/status', verifyToken, verifyAdmin, changeStatus);
+// PATCH /api/orders/:id/status — staff (admin, taquero, mesero, cajero)
+router.patch('/:id/status', verifyToken, verifyStaff, changeStatus);
 
 // DELETE /api/orders/:id — staff
-router.delete('/:id', verifyToken, verifyAdmin, cancel);
+router.delete('/:id', verifyToken, verifyStaff, cancel);
 
 module.exports = router;
+

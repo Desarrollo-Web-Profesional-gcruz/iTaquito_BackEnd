@@ -31,5 +31,12 @@ const verifyCajero = (req, res, next) => {
   next();
 };
 
+const verifyStaff = (req, res, next) => {
+  const staffRoles = ['admin', 'taquero', 'mesero', 'cajero'];
+  if (!staffRoles.includes(req.user?.rol)) {
+    return res.status(403).json({ message: 'Acceso restringido al personal.' });
+  }
+  next();
+};
 
-module.exports = { verifyToken, verifyAdmin, verifyCajero };
+module.exports = { verifyToken, verifyAdmin, verifyCajero, verifyStaff };
