@@ -11,6 +11,7 @@ class EmailService {
       port: parseInt(process.env.EMAIL_PORT) || 587,
       secure: false, // true para 465, false para otros puertos (como 587)
       requireTLS: true,
+      family: 4,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
