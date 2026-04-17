@@ -1,12 +1,59 @@
 'use strict';
 
 const emailService = require('../../common/email.service');
+const whatsappService = require('../../common/whatsapp.service');
 
 /**
- * Controlador para manejar el envío de tickets digitales por email.
+ * Controlador para manejar el envío de tickets digitales por email y WhatsApp.
  */
 class TicketsController {
   
+  /**
+   * Envía el ticket visual por WhatsApp automáticamente.
+   * POST /api/orders/send-ticket-whatsapp
+   */
+  async sendTicketWhatsApp(req, res) {
+    try {
+      const { phone, tableName, items, total } = req.body;
+
+      if (!phone || !items || !total) {
+        return res.status(400).json({
+          success: false,
+          message: 'Datos incompletos para enviar el ticket por WhatsApp.'
+        });
+      }
+
+      // Formatear el mensaje de texto para WhatsApp
+      const header = `*iTaquito 🌮*\n¡Hola! Aquí tienes el detalle de tu consumo en la *Mesa ${tableName || 'N/A'}*:\n\n`;
+      
+      const itemsList = items.map(item => 
+        `• ${item.nombre} x${item.qty} _($${(item.precio * item.qty).toFixed(2)})_`
+      ).join('\n');
+      
+      const footer = `\n\n*Total a Pagar: $${total.toFixed(2)}*\n\n¡Muchas gracias por tu visita! 👋`;
+      
+      const fullMessage = header + itemsList + footer;
+
+      // Envío automático vía API
+      const result = await whatsappService.sendMessage(phone, fullMessage);
+
+      if (result.success) {
+        return res.status(200).json({
+          success: true,
+          message: 'Ticket enviado por WhatsApp exitosamente.'
+        });
+      } else {
+        throw new Error('Error al enviar mensaje vía API');
+      }
+    } catch (error) {
+      console.error('Error al enviar ticket por WhatsApp:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'No se pudo enviar el mensaje de WhatsApp automático.'
+      });
+    }
+  }
+
   /**
    * Envía el ticket visual por correo electrónico.
    * POST /api/orders/send-ticket-email

@@ -34,8 +34,11 @@ router.patch('/:id/status', verifyToken, verifyStaff, changeStatus);
 // DELETE /api/orders/:id — staff
 router.delete('/:id', verifyToken, verifyStaff, cancel);
 
-// POST /api/orders/send-ticket-email — Cliente envía su ticket
+// POST /api/orders/send-ticket-email — Cliente envía su ticket por email
 router.post('/send-ticket-email', (req, res) => ticketsController.sendTicketEmail(req, res));
+
+// POST /api/orders/send-ticket-whatsapp — Cliente envía su ticket por whatsapp automático
+router.post('/send-ticket-whatsapp', (req, res) => ticketsController.sendTicketWhatsApp(req, res));
 
 module.exports = router;
 
