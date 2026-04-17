@@ -36,7 +36,6 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // Express v5 — wildcard con nombre obligatorio
-app.options('/{*splat}', cors(corsOptions));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
