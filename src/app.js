@@ -44,7 +44,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // Preflight explícito — necesario para requests con Authorization header
-app.options('*', cors(corsOptions));
+app.options(/(.*)/, cors(corsOptions));
 
 // Middlewares globales
 app.use(express.json());
