@@ -44,6 +44,14 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: true,
         comment: 'false = eliminado lógicamente',
       },
+      bLlamandoMesero: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      sLlamandoContexto: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
     },
     {
       sequelize,

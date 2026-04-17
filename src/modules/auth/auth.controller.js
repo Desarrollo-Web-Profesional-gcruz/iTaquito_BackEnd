@@ -99,6 +99,9 @@ const login = async (req, res) => {
       }
     }
 
+    // Actualizar el dUltimoLogin para iniciar una nueva sesión
+    await user.update({ dUltimoLogin: new Date() });
+
     const token = jwt.sign(
       { 
         id: user.id, 
@@ -168,6 +171,9 @@ const verify2FA = async (req, res) => {
     if (!isValid2FA && !isBackupCode) {
       return res.status(401).json({ message: 'Código 2FA inválido' });
     }
+
+    // Actualizar el dUltimoLogin para iniciar una nueva sesión
+    await user.update({ dUltimoLogin: new Date() });
 
     const token = jwt.sign(
       { 

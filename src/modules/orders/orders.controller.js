@@ -45,30 +45,47 @@ const getAll = async (req, res) => {
       const fin    = new Date(fecha);
       fin.setDate(fin.getDate() + 1);
       where.createdAt = { [Op.gte]: inicio, [Op.lt]: fin };
+    } else {
+      // Por defecto, solo pedidos de HOY si no se especifica fecha
+      const hoyInicio = new Date();
+      hoyInicio.setHours(0, 0, 0, 0);
+      const hoyFin = new Date();
+      hoyFin.setHours(23, 59, 59, 999);
+      where.createdAt = { [Op.gte]: hoyInicio, [Op.lt]: hoyFin };
     }
 
-    if (req.user.rol === 'mesa') {
-      // FIX: iMesaId puede venir del token (fix nuevo) o del query param (fallback)
-      const mesaIdFinal = req.user.iMesaId ?? (iMesaId ? parseInt(iMesaId) : null);
-
-      if (!mesaIdFinal) {
-        return res.status(400).json({
-          success: false,
-          message: 'Token inválido: falta el id de mesa.',
-        });
-      }
-
-      where.iMesaId    = mesaIdFinal;
+    // 1. Identificar al usuario/mesa si no es personal
+    if (req.user && req.user.rol === 'mesa') {
+      where.iMesaId = req.user.iMesaId;
       where.iUsuarioId = req.user.id;
-
-      if (req.query.sTokenSesion) {
-        where.sTokenSesion = req.query.sTokenSesion;
-      } else if (req.user.loginAt) {
+      // Filtro por tiempo de login como base de seguridad OBLIGATORIA
+      if (req.user.loginAt) {
         where.createdAt = { [Op.gte]: new Date(req.user.loginAt) };
       }
+    } 
+    // 2. Si es personal, permitir filtrar por mesa libremente
+    else if (req.user && ['admin', 'mesero', 'cajero', 'taquero'].includes(req.user.rol)) {
+      if (req.query.iMesaId) where.iMesaId = parseInt(req.query.iMesaId);
+    }
+    // 3. Si no hay usuario y viene mesa/token (caso ticket visual sin login completo en algunos flujos)
+    else if (req.query.iMesaId) {
+      where.iMesaId = parseInt(req.query.iMesaId);
+    }
 
-    } else if (iMesaId) {
-      where.iMesaId = iMesaId;
+    // 4. APLICAR FILTRADO POR TOKEN DE SESIÓN (Filtro Cruzado)
+    if (req.query.sTokenSesion && req.query.sTokenSesion !== 'null' && req.query.sTokenSesion !== 'undefined') {
+      where.sTokenSesion = req.query.sTokenSesion;
+    } else if (req.user && req.user.rol === 'mesa') {
+      // Si el cliente no provee un token válido, forzamos un filtro que no devuelva 
+      // pedidos con token nulo (que suelen ser de sesiones viejas o errores)
+      where.sTokenSesion = { [Op.ne]: null }; 
+      // Nota: Esto podría vaciar el ticket si la sesión actual no se guardó con token.
+      // Por eso el frontend debe asegurar el token siempre.
+    }
+
+    // Si al final no tenemos ni mesa ni token ni usuario, error de seguridad
+    if (Object.keys(where).length === 0 && !req.query.fecha) {
+      return res.status(403).json({ success: false, message: 'Se requiere una sesión o parámetros de búsqueda.' });
     }
 
     const orders = await Order.findAll({

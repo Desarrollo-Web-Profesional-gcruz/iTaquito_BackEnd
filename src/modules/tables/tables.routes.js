@@ -6,10 +6,16 @@ const {
   update,
   remove,
   changeStatus,
+  llamarMesero,
+  atenderLlamada
 } = require('./tables.controller');
 const { verifyToken, verifyAdmin } = require('../../common/middleware/auth.middleware');
 
 const router = Router();
+
+// Rutas sin auth estricto (lo pueden llamar desde el cliente)
+router.post('/:id/llamar', llamarMesero);
+router.post('/:id/atender', atenderLlamada);
 
 // Rutas públicas (accesibles con token de empleado)
 router.get('/', verifyToken, getAll);

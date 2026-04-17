@@ -233,6 +233,16 @@ const changeStatus = async (req, res) => {
 
     await table.update({ sEstado });
 
+    // Si la mesa se ocupó, actualizar el dUltimoLogin del usuario asociado a la mesa 
+    // para que la Rockola y otras lógicas de sesión se reinicien limpias.
+    if (sEstado === 'ocupada') {
+      const { User } = require('../../models');
+      const mesaUser = await User.findOne({ where: { iMesaId: req.params.id } });
+      if (mesaUser) {
+        await mesaUser.update({ dUltimoLogin: new Date() });
+      }
+    }
+
     return res.json({ 
       success: true, 
       message: 'Estado de mesa actualizado.', 
@@ -247,6 +257,50 @@ const changeStatus = async (req, res) => {
   }
 };
 
+// POST /api/tables/:id/llamar
+const llamarMesero = async (req, res) => {
+  try {
+    const tableId = req.params.id;
+    if (!tableId || tableId === 'undefined' || tableId === 'null') {
+      return res.status(400).json({ success: false, message: 'ID de mesa no válido.' });
+    }
+
+    const table = await Table.findByPk(tableId);
+    if (!table) return res.status(404).json({ success: false, message: 'Mesa no encontrada.' });
+
+    await table.update({
+      bLlamandoMesero: true,
+      sLlamandoContexto: req.body.contexto || 'Sin especificar',
+    });
+
+    return res.json({ success: true, message: 'Mesero llamado correctamente.' });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Error al llamar al mesero.', error: error.message });
+  }
+};
+
+// POST /api/tables/:id/atender
+const atenderLlamada = async (req, res) => {
+  try {
+    const tableId = req.params.id;
+    if (!tableId || tableId === 'undefined' || tableId === 'null') {
+      return res.status(400).json({ success: false, message: 'ID de mesa no válido.' });
+    }
+
+    const table = await Table.findByPk(tableId);
+    if (!table) return res.status(404).json({ success: false, message: 'Mesa no encontrada.' });
+
+    await table.update({
+      bLlamandoMesero: false,
+      sLlamandoContexto: null,
+    });
+
+    return res.json({ success: true, message: 'Llamada atendida correctamente.' });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Error al atender llamada.', error: error.message });
+  }
+};
+
 module.exports = {
   getAll,
   getById,
@@ -254,4 +308,7 @@ module.exports = {
   update,
   remove,
   changeStatus,
+  llamarMesero,
+  atenderLlamada,
 };
+

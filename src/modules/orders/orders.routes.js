@@ -9,6 +9,7 @@ const {
   changeStatus,
   cancel,
 } = require('./orders.controller');
+const ticketsController = require('./tickets.controller');
 
 const router = Router();
 
@@ -16,7 +17,13 @@ const router = Router();
 router.post('/', verifyToken, create);
 
 // GET /api/orders — mesa ve sus pedidos (filtrado por mesa), staff ve todos
-router.get('/', verifyToken, getAll);
+router.get('/', (req, res, next) => {
+  // Hack: Permitir consulta si viene iMesaId o sTokenSesion (para el ticket visual)
+  if (req.query.sTokenSesion || req.query.iMesaId) {
+    return getAll(req, res);
+  }
+  return verifyToken(req, res, () => getAll(req, res));
+});
 
 // GET /api/orders/:id
 router.get('/:id', verifyToken, getById);
@@ -26,6 +33,9 @@ router.patch('/:id/status', verifyToken, verifyStaff, changeStatus);
 
 // DELETE /api/orders/:id — staff
 router.delete('/:id', verifyToken, verifyStaff, cancel);
+
+// POST /api/orders/send-ticket-email — Cliente envía su ticket
+router.post('/send-ticket-email', (req, res) => ticketsController.sendTicketEmail(req, res));
 
 module.exports = router;
 
