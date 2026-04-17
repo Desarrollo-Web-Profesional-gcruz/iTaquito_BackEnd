@@ -1,39 +1,69 @@
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 
+/**
+ * Servicio centralizado para el envío de correos electrónicos.
+ * Migrado de Resend a Nodemailer (Gmail SMTP) para evitar limitaciones de sandbox en producción.
+ */
 class EmailService {
   constructor() {
-    this.apiKey = process.env.RESEND_API_KEY;
-    if (this.apiKey) {
-      this.resend = new Resend(this.apiKey);
-    } else {
-      console.warn('⚠️  RESEND_API_KEY no encontrada en .env. El servicio de correos no estará disponible.');
-      this.resend = null;
-    }
+    this.transporter = nodemailer.createTransport({
+      host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+      port: 465, // Usamos 465 para SSL (más estable en producción que 587)
+      secure: true,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+      tls: {
+        // No fallar si el certificado es auto-firmado (común en algunos entornos de red)
+        rejectUnauthorized: false
+      }
+    });
+
+    // Verificar conexión al iniciar para facilitar debugging
+    this.transporter.verify((error, success) => {
+      if (error) {
+        console.error('❌ Error en configuración SMTP:', error.message);
+      } else {
+        console.log('✅ Servidor de correos (SMTP) listo para enviar.');
+      }
+    });
   }
 
+  /**
+   * Envía un correo electrónico.
+   * @param {Object} options - Opciones de envío.
+   * @param {string} options.to - Destinatario.
+   * @param {string} options.subject - Asunto.
+   * @param {string} options.html - Contenido HTML.
+   * @param {string} [options.text] - Contenido texto plano.
+   * @param {Array} [options.attachments] - Archivos adjuntos.
+   */
   async sendEmail({ to, subject, html, text, attachments = [] }) {
-    if (!this.resend) {
-      console.warn('Intento de enviar correo sin RESEND_API_KEY configurada.');
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.warn('⚠️  Credenciales de EMAIL no configuradas en .env. No se puede enviar correo.');
       return { success: false, message: 'Servicio de correo no configurado' };
     }
 
     try {
-      const { data, error } = await this.resend.emails.send({
-        from: 'iTaquito 🌮 <onboarding@resend.dev>', // dominio gratuito de Resend
+      const mailOptions = {
+        from: `"iTaquito 🌮" <${process.env.EMAIL_USER}>`,
         to,
         subject,
         html,
-        text,
-      });
+        text: text || 'Se adjunta la información solicitada de iTaquito.',
+        attachments
+      };
 
-      if (error) throw new Error(error.message);
-
-      console.log('Correo enviado:', data.id);
-      return { success: true, messageId: data.id };
+      const info = await this.transporter.sendMail(mailOptions);
+      
+      console.log('📧 Correo enviado exitosamente:', info.messageId);
+      return { success: true, messageId: info.messageId };
     } catch (error) {
-      console.error('--- DEBUG EMAIL ERROR ---');
-      console.error('Message:', error.message);
-      console.error('--------------------------');
+      console.error('--- ❌ ERROR SMTP ---');
+      console.error('Mensaje:', error.message);
+      console.error('Código:', error.code);
+      console.error('----------------------');
       throw error;
     }
   }
