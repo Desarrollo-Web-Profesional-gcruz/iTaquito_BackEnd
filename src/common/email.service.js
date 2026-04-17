@@ -2,10 +2,21 @@ const { Resend } = require('resend');
 
 class EmailService {
   constructor() {
-    this.resend = new Resend(process.env.RESEND_API_KEY);
+    this.apiKey = process.env.RESEND_API_KEY;
+    if (this.apiKey) {
+      this.resend = new Resend(this.apiKey);
+    } else {
+      console.warn('⚠️  RESEND_API_KEY no encontrada en .env. El servicio de correos no estará disponible.');
+      this.resend = null;
+    }
   }
 
   async sendEmail({ to, subject, html, text, attachments = [] }) {
+    if (!this.resend) {
+      console.warn('Intento de enviar correo sin RESEND_API_KEY configurada.');
+      return { success: false, message: 'Servicio de correo no configurado' };
+    }
+
     try {
       const { data, error } = await this.resend.emails.send({
         from: 'iTaquito 🌮 <onboarding@resend.dev>', // dominio gratuito de Resend
